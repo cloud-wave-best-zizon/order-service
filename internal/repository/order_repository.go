@@ -7,6 +7,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
@@ -20,11 +21,41 @@ type OrderRepository struct {
 }
 
 func NewDynamoDBClient(cfg *pkgconfig.Config) (*dynamodb.Client, error) {
-	awsCfg, err := config.LoadDefaultConfig(context.TODO(),
-		config.WithRegion(cfg.AWSRegion),
-	)
+	var awsCfg aws.Config
+	var err error
+
+	if cfg.DynamoDBEndpoint != "" {
+		// DynamoDB Local 사용
+		customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+			if service == dynamodb.ServiceID {
+				return aws.Endpoint{
+					URL:           cfg.DynamoDBEndpoint,
+					SigningRegion: cfg.AWSRegion,
+				}, nil
+			}
+			return aws.Endpoint{}, &aws.EndpointNotFoundError{}
+		})
+
+		awsCfg, err = config.LoadDefaultConfig(context.TODO(),
+			config.WithRegion(cfg.AWSRegion),
+			config.WithEndpointResolverWithOptions(customResolver),
+			config.WithCredentialsProvider(credentials.StaticCredentialsProvider{
+				Value: aws.Credentials{
+					AccessKeyID:     "dummy",
+					SecretAccessKey: "dummy",
+					SessionToken:    "",
+				},
+			}),
+		)
+	} else {
+		// 실제 AWS DynamoDB 사용
+		awsCfg, err = config.LoadDefaultConfig(context.TODO(),
+			config.WithRegion(cfg.AWSRegion),
+		)
+	}
+
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
 	return dynamodb.NewFromConfig(awsCfg), nil
@@ -44,8 +75,8 @@ func (r *OrderRepository) CreateOrder(ctx context.Context, order *domain.Order) 
 		return fmt.Errorf("failed to marshal order: %w", err)
 	}
 
-	// PK, SK 추가
-	av["PK"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("ORDER#%s", order.OrderID)}
+	// PK, SK 추가 - OrderID는 int이므로 %d 사용
+	av["PK"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("ORDER#%d", order.OrderID)}
 	av["SK"] = &types.AttributeValueMemberS{Value: "METADATA"}
 	av["GSI1PK"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("USER#%s", order.UserID)}
 	av["GSI1SK"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("ORDER#%s", order.CreatedAt.Format("2006-01-02T15:04:05Z"))}
@@ -86,6 +117,37 @@ func (r *OrderRepository) GetOrder(ctx context.Context, id int) (*domain.Order, 
 		return nil, err
 	}
 	return &order, nil
+}
+
+// GetOrdersByUser - 특정 사용자의 주문 목록 조회
+func (r *OrderRepository) GetOrdersByUser(ctx context.Context, userID string, limit int32) ([]*domain.Order, error) {
+	gsi1pk := fmt.Sprintf("USER#%s", userID)
+
+	out, err := r.client.Query(ctx, &dynamodb.QueryInput{
+		TableName:              aws.String(r.tableName),
+		IndexName:              aws.String("GSI1"),
+		KeyConditionExpression: aws.String("GSI1PK = :gsi1pk"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":gsi1pk": &types.AttributeValueMemberS{Value: gsi1pk},
+		},
+		Limit:            aws.Int32(limit),
+		ScanIndexForward: aws.Bool(false), // 최신 주문부터
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to query orders: %w", err)
+	}
+
+	orders := make([]*domain.Order, 0, len(out.Items))
+	for _, item := range out.Items {
+		var order domain.Order
+		if err := attributevalue.UnmarshalMap(item, &order); err != nil {
+			return nil, err
+		}
+		orders = append(orders, &order)
+	}
+
+	return orders, nil
 }
 
 var ErrOrderNotFound = errors.New("order not found")
