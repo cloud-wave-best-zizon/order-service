@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -61,3 +62,30 @@ func (r *OrderRepository) CreateOrder(ctx context.Context, order *domain.Order) 
 
 	return nil
 }
+
+func (r *OrderRepository) GetOrder(ctx context.Context, id int) (*domain.Order, error) {
+	pk := fmt.Sprintf("ORDER#%d", id)
+
+	out, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: aws.String(r.tableName),
+		Key: map[string]types.AttributeValue{
+			"PK": &types.AttributeValueMemberS{Value: pk},
+			"SK": &types.AttributeValueMemberS{Value: "METADATA"},
+		},
+		ConsistentRead: aws.Bool(true),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if out.Item == nil || len(out.Item) == 0 {
+		return nil, ErrOrderNotFound
+	}
+
+	var order domain.Order
+	if err := attributevalue.UnmarshalMap(out.Item, &order); err != nil {
+		return nil, err
+	}
+	return &order, nil
+}
+
+var ErrOrderNotFound = errors.New("order not found")
