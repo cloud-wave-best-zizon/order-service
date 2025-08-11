@@ -1,9 +1,12 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/cloud-wave-best-zizon/order-service/internal/domain"
+	"github.com/cloud-wave-best-zizon/order-service/internal/repository"
 	"github.com/cloud-wave-best-zizon/order-service/internal/service"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -59,4 +62,25 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, response)
+}
+
+func (h *OrderHandler) GetOrder(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	order, err := h.orderService.GetOrder(c.Request.Context(), id)
+	if err != nil {
+		if errors.Is(err, repository.ErrOrderNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, order)
 }

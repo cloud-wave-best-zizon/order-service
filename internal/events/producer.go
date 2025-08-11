@@ -2,6 +2,7 @@ package events
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/cloud-wave-best-zizon/order-service/internal/domain"
@@ -10,7 +11,7 @@ import (
 
 type OrderCreatedEvent struct {
 	EventID     string             `json:"event_id"`
-	OrderID     string             `json:"order_id"`
+	OrderID     int                `json:"order_id"`  // int로 변경
 	UserID      string             `json:"user_id"`
 	TotalAmount float64            `json:"total_amount"`
 	Items       []domain.OrderItem `json:"items"`
@@ -56,12 +57,14 @@ func (p *KafkaProducer) PublishOrderCreated(event OrderCreatedEvent) error {
 	}
 
 	topic := "order-events"
+	orderIDKey := fmt.Sprintf("ORDER#%d", event.OrderID)
+	
 	return p.producer.Produce(&kafka.Message{
 		TopicPartition: kafka.TopicPartition{
 			Topic:     &topic,
 			Partition: kafka.PartitionAny,
 		},
-		Key:   []byte(event.OrderID),
+		Key:   []byte(orderIDKey),
 		Value: data,
 	}, nil)
 }

@@ -26,14 +26,15 @@ func NewOrderService(orderRepo *repository.OrderRepository, producer *events.Kaf
 }
 
 func (s *OrderService) CreateOrder(ctx context.Context, req domain.CreateOrderRequest, requestID string) (*domain.Order, error) {
-	// Order 생성
+	// Order 생성 - Unix milliseconds를 사용하여 유니크한 OrderID 생성
 	order := &domain.Order{
-		OrderID:   uuid.New().String(),
-		UserID:    req.UserID,
-		Items:     make([]domain.OrderItem, 0, len(req.Items)),
-		Status:    domain.OrderStatusPending,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		OrderID:        int(time.Now().UnixMilli()),
+		UserID:         req.UserID,
+		Items:          make([]domain.OrderItem, 0, len(req.Items)),
+		Status:         domain.OrderStatusPending,
+		IdempotencyKey: req.IdempotencyKey,
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
 	}
 
 	// Items 처리 및 총액 계산
@@ -45,7 +46,6 @@ func (s *OrderService) CreateOrder(ctx context.Context, req domain.CreateOrderRe
 			ProductName: item.ProductName,
 			Quantity:    item.Quantity,
 			Price:       item.Price,
-			Subtotal:    subtotal,
 		}
 		order.Items = append(order.Items, orderItem)
 		totalAmount += subtotal
@@ -55,7 +55,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, req domain.CreateOrderRe
 	// DynamoDB에 저장
 	if err := s.orderRepo.CreateOrder(ctx, order); err != nil {
 		s.logger.Error("Failed to save order",
-			zap.String("order_id", order.OrderID),
+			zap.Int("order_id", order.OrderID),
 			zap.Error(err))
 		return nil, err
 	}
@@ -75,15 +75,24 @@ func (s *OrderService) CreateOrder(ctx context.Context, req domain.CreateOrderRe
 	if err := s.producer.PublishOrderCreated(event); err != nil {
 		// 이벤트 발행 실패 시 로그만 (Eventual Consistency)
 		s.logger.Error("Failed to publish event",
-			zap.String("order_id", order.OrderID),
+			zap.Int("order_id", order.OrderID),
 			zap.Error(err))
 		// TODO: Outbox Pattern 구현
 	}
 
 	s.logger.Info("Order created successfully",
-		zap.String("order_id", order.OrderID),
+		zap.Int("order_id", order.OrderID),
 		zap.String("user_id", order.UserID),
 		zap.Float64("total_amount", order.TotalAmount))
 
+	return order, nil
+}
+
+func (s *OrderService) GetOrder(ctx context.Context, id int) (*domain.Order, error) {
+	order, err := s.orderRepo.GetOrder(ctx, id)
+	if err != nil {
+		s.logger.Warn("GetOrder failed", zap.Int("order_id", id), zap.Error(err))
+		return nil, err
+	}
 	return order, nil
 }

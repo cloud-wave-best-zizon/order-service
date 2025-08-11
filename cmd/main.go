@@ -1,85 +1,93 @@
 package main
 
 import (
-    "context"
-    "log"
-    "net/http"
-    "os"
-    "os/signal"
-    "syscall"
-    "time"
+	"context"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
-    "github.com/gin-gonic/gin"
-    "github.com/cloud-wave-best-zizon/order-service/internal/handler"
-    "github.com/cloud-wave-best-zizon/order-service/internal/repository"
-    "github.com/cloud-wave-best-zizon/order-service/internal/service"
-    "github.com/cloud-wave-best-zizon/order-service/pkg/config"
-    "github.com/cloud-wave-best-zizon/order-service/pkg/middleware"
-    "go.uber.org/zap"
+	"github.com/cloud-wave-best-zizon/order-service/internal/events"
+	"github.com/cloud-wave-best-zizon/order-service/internal/handler"
+	"github.com/cloud-wave-best-zizon/order-service/internal/repository"
+	"github.com/cloud-wave-best-zizon/order-service/internal/service"
+	"github.com/cloud-wave-best-zizon/order-service/pkg/config"
+	"github.com/cloud-wave-best-zizon/order-service/pkg/middleware"
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 func main() {
-    // Logger 초기화
-    logger, _ := zap.NewProduction()
-    defer logger.Sync()
+	// Logger 초기화
+	logger, _ := zap.NewProduction()
+	defer logger.Sync()
 
-    // Config 로드
-    cfg, err := config.Load()
-    if err != nil {
-        log.Fatal("Failed to load config:", err)
-    }
+	// Config 로드
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatal("Failed to load config:", err)
+	}
 
-    // DynamoDB 클라이언트 초기화
-    dynamoClient, err := repository.NewDynamoDBClient(cfg)
-    if err != nil {
-        log.Fatal("Failed to create DynamoDB client:", err)
-    }
+	// DynamoDB 클라이언트 초기화
+	dynamoClient, err := repository.NewDynamoDBClient(cfg)
+	if err != nil {
+		log.Fatal("Failed to create DynamoDB client:", err)
+	}
 
-    // Repository, Service, Handler 초기화
-    orderRepo := repository.NewOrderRepository(dynamoClient, cfg.OrderTableName)
-    orderService := service.NewOrderService(orderRepo, logger)
-    orderHandler := handler.NewOrderHandler(orderService, logger)
+	// kafka producer 생성
+	kafkaProducer, err := events.NewKafkaProducer(cfg.KafkaBrokers)
+	if err != nil {
+		log.Fatal("Failed to create Kafka producer:", err)
+	}
+	defer kafkaProducer.Close()
 
-    // Gin Router 설정
-    router := gin.New()
-    router.Use(gin.Recovery())
-    router.Use(middleware.Logger(logger))
-    router.Use(middleware.RequestID())
+	// Repository, Service, Handler 초기화
+	orderRepo := repository.NewOrderRepository(dynamoClient, cfg.OrderTableName)
+	orderService := service.NewOrderService(orderRepo, kafkaProducer, logger)
+	orderHandler := handler.NewOrderHandler(orderService, logger)
 
-    // Routes
-    v1 := router.Group("/api/v1")
-    {
-        v1.POST("/orders", orderHandler.CreateOrder)
-        v1.GET("/orders/:id", orderHandler.GetOrder)
-        v1.GET("/health", func(c *gin.Context) {
-            c.JSON(200, gin.H{"status": "healthy"})
-        })
-    }
+	// Gin Router 설정
+	router := gin.New()
+	router.Use(gin.Recovery())
+	router.Use(middleware.Logger(logger))
+	router.Use(middleware.RequestID())
 
-    // Server 시작
-    srv := &http.Server{
-        Addr:    ":" + cfg.Port,
-        Handler: router,
-    }
+	// Routes
+	v1 := router.Group("/api/v1")
+	{
+		v1.POST("/orders", orderHandler.CreateOrder)
+		v1.GET("/orders/:id", orderHandler.GetOrder)
+		v1.GET("/health", func(c *gin.Context) {
+			c.JSON(200, gin.H{"status": "healthy"})
+		})
+	}
 
-    go func() {
-        logger.Info("Starting server", zap.String("port", cfg.Port))
-        if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-            logger.Fatal("Failed to start server", zap.Error(err))
-        }
-    }()
+	// Server 시작
+	srv := &http.Server{
+		Addr:    ":" + cfg.Port,
+		Handler: router,
+	}
 
-    // Graceful Shutdown
-    quit := make(chan os.Signal, 1)
-    signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-    <-quit
+	go func() {
+		logger.Info("Starting server", zap.String("port", cfg.Port))
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Fatal("Failed to start server", zap.Error(err))
+		}
+	}()
 
-    logger.Info("Shutting down server...")
-    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-    defer cancel()
-    
-    if err := srv.Shutdown(ctx); err != nil {
-        logger.Fatal("Server forced to shutdown", zap.Error(err))
-    }
-    logger.Info("Server exited")
+	// Graceful Shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	logger.Info("Shutting down server...")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		logger.Fatal("Server forced to shutdown", zap.Error(err))
+	}
+	logger.Info("Server exited")
 }
