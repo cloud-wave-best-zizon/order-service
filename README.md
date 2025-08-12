@@ -60,7 +60,7 @@ aws configure
 aws sts get-caller-identity
 ```
 
-### 3. DynamoDB 테이블 생성
+### 3. DynamoDB 테이블 생성(AWS에 이미 올라가있음)
 ```bash
 # Orders 테이블 생성
 aws dynamodb create-table \
@@ -100,8 +100,6 @@ aws dynamodb list-tables --region ap-northeast-2
 cd order-service
 docker compose up -d
 
-# Kafka 준비 대기 (1-2분)
-sleep 90
 
 # 토픽 생성
 docker compose exec kafka kafka-topics --create \
