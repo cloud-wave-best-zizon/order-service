@@ -36,8 +36,8 @@ func main() {
 		log.Fatal("Failed to create DynamoDB client:", err)
 	}
 
-	// kafka producer 생성
-	kafkaProducer, err := events.NewKafkaProducer(cfg.KafkaBrokers)
+	// kafka producer 생성 (logger 추가)
+	kafkaProducer, err := events.NewKafkaProducer(cfg.KafkaBrokers, logger)
 	if err != nil {
 		log.Fatal("Failed to create Kafka producer:", err)
 	}
@@ -60,7 +60,21 @@ func main() {
 		v1.POST("/orders", orderHandler.CreateOrder)
 		v1.GET("/orders/:id", orderHandler.GetOrder)
 		v1.GET("/health", func(c *gin.Context) {
-			c.JSON(200, gin.H{"status": "healthy"})
+			status := gin.H{
+				"status": "healthy",
+				"service": "order-service",
+			}
+			
+			// Kafka 상태 확인
+			if err := kafkaProducer.HealthCheck(); err != nil {
+				status["kafka"] = "unhealthy"
+				status["kafka_error"] = err.Error()
+				c.JSON(503, status)
+				return
+			}
+			status["kafka"] = "healthy"
+			
+			c.JSON(200, status)
 		})
 	}
 
