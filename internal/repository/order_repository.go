@@ -7,7 +7,6 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
@@ -24,35 +23,9 @@ func NewDynamoDBClient(cfg *pkgconfig.Config) (*dynamodb.Client, error) {
 	var awsCfg aws.Config
 	var err error
 
-	if cfg.DynamoDBEndpoint != "" {
-		// DynamoDB Local 사용
-		customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-			if service == dynamodb.ServiceID {
-				return aws.Endpoint{
-					URL:           cfg.DynamoDBEndpoint,
-					SigningRegion: cfg.AWSRegion,
-				}, nil
-			}
-			return aws.Endpoint{}, &aws.EndpointNotFoundError{}
-		})
-
-		awsCfg, err = config.LoadDefaultConfig(context.TODO(),
-			config.WithRegion(cfg.AWSRegion),
-			config.WithEndpointResolverWithOptions(customResolver),
-			config.WithCredentialsProvider(credentials.StaticCredentialsProvider{
-				Value: aws.Credentials{
-					AccessKeyID:     "dummy",
-					SecretAccessKey: "dummy",
-					SessionToken:    "",
-				},
-			}),
-		)
-	} else {
-		// 실제 AWS DynamoDB 사용
-		awsCfg, err = config.LoadDefaultConfig(context.TODO(),
-			config.WithRegion(cfg.AWSRegion),
-		)
-	}
+	    awsCfg, err = config.LoadDefaultConfig(context.TODO(),
+        config.WithRegion(cfg.AWSRegion),
+	)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to load AWS config: %w", err)

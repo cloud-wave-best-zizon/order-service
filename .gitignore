@@ -55,3 +55,7 @@ docker/
 
 # DynamoDB Local data
 dynamodb-data/
+
+.env
+.env.local
+.env.*.local
