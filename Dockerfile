@@ -1,27 +1,22 @@
 # order-service/Dockerfile
-FROM golang:1.22-alpine AS builder
+FROM golang:1.24-alpine AS builder
+
+# 필수 빌드 도구 설치
+RUN apk add --no-cache git gcc musl-dev librdkafka-dev pkgconf
 
 WORKDIR /app
-
-# 의존성 파일 복사
 COPY go.mod go.sum ./
 RUN go mod download
 
-# 소스 코드 복사
 COPY . .
+# CGO_ENABLED=1로 변경
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -ldflags="-w -s" -o main cmd/main.go
 
-# 빌드
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main cmd/main.go
-
-# 최종 이미지
 FROM alpine:3.18
-
-RUN apk --no-cache add ca-certificates
+# 런타임에 필요한 라이브러리 설치
+RUN apk add --no-cache ca-certificates librdkafka
 
 WORKDIR /root/
-
-# 빌드된 바이너리 복사
 COPY --from=builder /app/main .
-
-# 실행
+EXPOSE 8080
 CMD ["./main"]
