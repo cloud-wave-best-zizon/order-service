@@ -37,3 +37,4 @@ update-manifest:
     - git config --global user.name "CI Bot"
     - git commit -am "chore: update image to $IMAGE_TAG"
     - git push origin main
+
