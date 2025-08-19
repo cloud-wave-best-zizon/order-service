@@ -8,14 +8,15 @@ variables:
 
 build-image:
   stage: build
-  image: docker:20.10.16          # 1. Docker 클라이언트가 설치된 공식 이미지를 사용
+  image: docker:20.10.16
   services:
-    - name: docker:20.10.16-dind  # 2. 'Docker-in-Docker' 서비스를 백그라운드에 실행
+    - name: docker:20.10.16-dind
       alias: docker
   variables:
-    DOCKER_TLS_CERTDIR: "/certs"    # 3. Docker 클라이언트와 서비스가 통신하기 위한 설정
-  only:
-    - main
+    # --- 아래 3개의 변수를 추가/수정합니다 ---
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_DRIVER: overlay2
   script:
     - echo "🔧 Docker 이미지 빌드 중..."
     - docker build -t $AWS_ECR_REPO:$IMAGE_TAG .
