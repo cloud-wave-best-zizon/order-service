@@ -22,6 +22,13 @@ build-image:
 
 push-image:
   stage: push
+  image: amazon/aws-cli:2.13.28  # 또는 docker:20.10.16 if docker도 같이 써야 함
+  services:
+    - name: docker:20.10.16-dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
   script:
     - echo "🔐 AWS ECR 로그인 중..."
     - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ECR_REPO
