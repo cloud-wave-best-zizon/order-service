@@ -72,7 +72,7 @@ func main() {
 
 		// --- 여기부터 추가 ---
 		// 간단한 응답 테스트를 위한 PING API
-		v1.GET("/ping", func(c *gin.Context) {
+		v1.GET("/orders/test/ping", func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{
 				"service":   "order-service",
 				"status":    "ok",
