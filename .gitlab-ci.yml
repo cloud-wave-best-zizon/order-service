@@ -1,27 +1,12 @@
 stages:
-  - build
-  - push
+  - build-and-push
   - update-manifest
 
 variables:
   IMAGE_TAG: $CI_COMMIT_SHORT_SHA
 
-build-image:
-  stage: build
-  image: docker:20.10.16
-  services:
-    - name: docker:20.10.16-dind
-      alias: docker
-  variables:
-    DOCKER_HOST: tcp://docker:2375
-    DOCKER_TLS_CERTDIR: ""
-    DOCKER_DRIVER: overlay2
-  script:
-    - echo "🔧 Docker 이미지 빌드 중..."
-    - docker build -t $AWS_ECR_REPO:$IMAGE_TAG .
-
-push-image:
-  stage: push
+build-and-push:
+  stage: build-and-push
   image: docker:20.10.16
   services:
     - name: docker:20.10.16-dind
@@ -33,6 +18,8 @@ push-image:
     - apk add --no-cache python3 py3-pip
     - pip3 install awscli
   script:
+    - echo "🔧 Docker 이미지 빌드 중..."
+    - docker build -t $AWS_ECR_REPO:$IMAGE_TAG .
     - echo "🔐 AWS ECR 로그인 중..."
     - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ECR_REPO
     - echo "📤 ECR에 이미지 푸시 중..."
