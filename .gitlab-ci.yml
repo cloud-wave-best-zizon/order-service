@@ -32,9 +32,10 @@ update-manifest:
     - echo "📝 manifest 레포 클론 및 이미지 태그 수정 중..."
     - git clone git@localhost:your-user/manifest.git
     - cd manifest/order-service
-    - sed -i "s|image:.*|image: $AWS_ECR_REPO:$IMAGE_TAG|" deployment.yaml
+    - |
+      sed -i "s|image:.*|image: ${AWS_ECR_REPO}:${IMAGE_TAG}|" deployment.yaml
     - git config --global user.email "ci@example.com"
     - git config --global user.name "CI Bot"
     - git add deployment.yaml
-    - git commit -m "chore: update image to $IMAGE_TAG"
+    - git commit -m "chore: update image to ${IMAGE_TAG}"
     - git push origin main
