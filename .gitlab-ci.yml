@@ -13,9 +13,8 @@ build-image:
     - name: docker:20.10.16-dind
       alias: docker
   variables:
-    # --- 아래 3개의 변수를 추가/수정합니다 ---
-    DOCKER_HOST: tcp://docker:2376
-    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
     DOCKER_DRIVER: overlay2
   script:
     - echo "🔧 Docker 이미지 빌드 중..."
