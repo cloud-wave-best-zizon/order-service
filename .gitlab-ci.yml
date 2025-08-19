@@ -27,6 +27,7 @@ build-and-push:
 
 update-manifest:
   stage: update-manifest
+  image: alpine/git
   only:
     - main
   script:
