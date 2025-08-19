@@ -47,4 +47,4 @@ update-manifest:
       else
         git commit -m "chore: update image to ${IMAGE_TAG}"
         git push origin main
-      fi
+      fi 
