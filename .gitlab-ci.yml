@@ -9,7 +9,7 @@ variables:
 
 code-analysis:
   stage: code-analysis
-  image: sonarsource/sonar-scanner-cli:latest
+  image: newtmitch/sonar-scanner:latest
   script:
     - echo "🔍 [SonarQube] 정적 분석을 시작합니다..."
     - sonar-scanner \
