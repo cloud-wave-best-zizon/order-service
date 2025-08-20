@@ -12,11 +12,13 @@ code-analysis:
   image: bedinotom/sonar-cube-cli:arm64
   script:
     - echo "🔍 [SonarQube] 정적 분석을 시작합니다..."
-    - sonar-scanner \
+    - |
+      sonar-scanner \
         -Dsonar.projectKey=order-service \
         -Dsonar.sources=. \
         -Dsonar.host.url=http://$HOST_URL:9000 \
         -Dsonar.login=$SONAR_TOKEN
+    - echo "✅ [SonarQube] 정적 분석 완료"
     - echo "✅ [SonarQube] 정적 분석이 완료되었습니다."
 
 build-and-push:
