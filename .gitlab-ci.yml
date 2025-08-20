@@ -9,7 +9,7 @@ variables:
 
 code-analysis:
   stage: code-analysis
-  image: eclipse-temurin:17-jdk-alpine
+  image: bellsoft/liberica-openjdk-alpine:17
 
   before_script:
     - apk add --no-cache curl unzip
