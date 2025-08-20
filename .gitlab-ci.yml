@@ -9,17 +9,19 @@ variables:
 
 code-analysis:
   stage: code-analysis
-  image: bedinotom/sonar-cube-cli:arm64
-  script:
-    - echo "🔍 [SonarQube] 정적 분석을 시작합니다..."
-    - |
-      sonar-scanner \
-        -Dsonar.projectKey=order-service \
-        -Dsonar.sources=. \
-        -Dsonar.host.url=http://$HOST_URL:9000 \
-        -Dsonar.login=$SONAR_TOKEN
-    - echo "✅ [SonarQube] 정적 분석 완료"
-    - echo "✅ [SonarQube] 정적 분석이 완료되었습니다."
+  image: eclipse-temurin:17-jdk-alpine
+
+script:
+  - apk add --no-cache curl unzip
+  - curl -sSLo sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
+  - unzip sonar-scanner.zip && mv sonar-scanner-* sonar-scanner
+  - echo "🔍 [SonarQube] 정적 분석을 시작합니다..."
+  - ./sonar-scanner/bin/sonar-scanner \
+      -Dsonar.projectKey=order-service \
+      -Dsonar.sources=. \
+      -Dsonar.host.url=http://$HOST_URL:9000 \
+      -Dsonar.login=$SONAR_TOKEN
+  - echo "✅ [SonarQube] 정적 분석 완료"
 
 build-and-push:
   stage: build-and-push
