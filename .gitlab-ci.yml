@@ -24,7 +24,7 @@ code-analysis:
         -Dsonar.projectKey=order-service \
         -Dsonar.sources=. \
         -Dsonar.host.url=http://$HOST_URL:9000 \
-        -Dsonar.login=$SONAR_TOKEN
+        -Dsonar.token=$SONAR_TOKEN
     - echo "✅ [SonarQube] 정적 분석 완료"
 
 build-and-push:
