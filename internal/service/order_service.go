@@ -26,12 +26,26 @@ func NewOrderService(orderRepo *repository.OrderRepository, producer *events.Kaf
 }
 
 func (s *OrderService) CreateOrder(ctx context.Context, req domain.CreateOrderRequest, requestID string) (*domain.Order, error) {
-    s.logger.Info("Creating order",
-        zap.String("user_id", req.UserID),
-        zap.String("request_id", requestID),
-        zap.String("idempotency_key", req.IdempotencyKey),
-        zap.Int("items_count", len(req.Items)))
+	// Context에서 추가 정보 추출
+	userAgent := ""
+	sourceIP := ""
+	if val := ctx.Value("user_agent"); val != nil {
+		userAgent, _ = val.(string)
+	}
+	if val := ctx.Value("source_ip"); val != nil {
+		sourceIP, _ = val.(string)
+	}
 
+	// 로깅 강화
+	s.logger.Info("Creating order",
+		zap.String("user_id", req.UserID),
+		zap.String("request_id", requestID),
+		zap.String("idempotency_key", req.IdempotencyKey),
+		zap.String("user_agent", userAgent),
+		zap.String("source_ip", sourceIP),
+		zap.Int("items_count", len(req.Items)))
+
+	// Order 생성 - Unix milliseconds를 사용하여 유니크한 OrderID 생성
 	order := &domain.Order{
 		OrderID:        int(time.Now().UnixMilli()),
 		UserID:         req.UserID,
@@ -67,16 +81,17 @@ func (s *OrderService) CreateOrder(ctx context.Context, req domain.CreateOrderRe
 
 	// Kafka 이벤트 발행
 	event := events.OrderCreatedEvent{
-		EventID:     uuid.New().String(),
-		OrderID:     order.OrderID,
-		UserID:      order.UserID,
-		TotalAmount: order.TotalAmount,
-		Items:       order.Items,
-		Status:      string(order.Status),
-		Timestamp:   time.Now(),
-		RequestID:   requestID,
-        IdempotencyKey: req.IdempotencyKey,  // 추가
-        UserAgent:      c.Request.UserAgent(), // 추가 (handler에서 전달)
+		EventID:        uuid.New().String(),
+		OrderID:        order.OrderID,
+		UserID:         order.UserID,
+		TotalAmount:    order.TotalAmount,
+		Items:          order.Items,
+		Status:         string(order.Status),
+		Timestamp:      time.Now(),
+		RequestID:      requestID,
+		IdempotencyKey: req.IdempotencyKey,
+		UserAgent:      userAgent,  // context에서 가져온 값
+		SourceIP:       sourceIP,   // context에서 가져온 값
 	}
 
 	if err := s.producer.PublishOrderCreated(event); err != nil {

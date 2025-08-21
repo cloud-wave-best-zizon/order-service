@@ -15,6 +15,8 @@ type KafkaProducer struct {
     logger *zap.Logger
 }
 
+
+
 func NewKafkaProducer(brokers string, logger *zap.Logger) (*KafkaProducer, error) {
     writer := &kafka.Writer{
         Addr:     kafka.TCP(brokers),

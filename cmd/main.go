@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -18,14 +20,15 @@ import (
 	pkgtls "github.com/cloud-wave-best-zizon/order-service/pkg/tls"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"github.com/kelseyhightower/envconfig"
 	"go.uber.org/zap"
 )
 
 func main() {
-
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, using environment variables")
 	}
+
 	// Logger 초기화
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
@@ -36,10 +39,17 @@ func main() {
 		log.Fatal("Failed to load config:", err)
 	}
 
+	// TLS 설정 로드 (여기로 이동!)
+	tlsConfig := &pkgtls.TLSConfig{}
+	if err := envconfig.Process("", tlsConfig); err != nil {
+		logger.Fatal("Failed to load TLS config", zap.Error(err))
+	}
+
 	logger.Info("Service configuration",
 		zap.String("port", cfg.Port),
 		zap.String("kafka_brokers", cfg.KafkaBrokers),
-		zap.String("dynamodb_endpoint", cfg.DynamoDBEndpoint))
+		zap.String("dynamodb_endpoint", cfg.DynamoDBEndpoint),
+		zap.Bool("tls_enabled", tlsConfig.Enabled))
 
 	// DynamoDB 클라이언트 초기화
 	dynamoClient, err := repository.NewDynamoDBClient(cfg)
@@ -47,7 +57,7 @@ func main() {
 		log.Fatal("Failed to create DynamoDB client:", err)
 	}
 
-	// kafka producer 생성 (logger 추가)
+	// kafka producer 생성
 	kafkaProducer, err := events.NewKafkaProducer(cfg.KafkaBrokers, logger)
 	if err != nil {
 		log.Fatal("Failed to create Kafka producer:", err)
@@ -71,8 +81,6 @@ func main() {
 		v1.POST("/orders", orderHandler.CreateOrder)
 		v1.GET("/orders/:id", orderHandler.GetOrder)
 
-		// --- 여기부터 추가 ---
-		// 간단한 응답 테스트를 위한 PING API
 		v1.GET("/orders/test/ping", func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{
 				"service":   "order-service",
@@ -80,13 +88,13 @@ func main() {
 				"timestamp": time.Now().Format(time.RFC3339),
 			})
 		})
-		// --- 여기까지 추가 ---
 
 		v1.GET("/health", func(c *gin.Context) {
 			status := gin.H{
-				"status":  "healthy",
-				"service": "order-service",
-				"port":    cfg.Port,
+				"status":    "healthy",
+				"service":   "order-service",
+				"port":      cfg.Port,
+				"tls":       tlsConfig.Enabled,
 			}
 
 			// Kafka 상태 확인
@@ -102,65 +110,49 @@ func main() {
 		})
 	}
 
-	// Server 시작
+	// Server 설정 (한 번만!)
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,
 		Handler: router,
 	}
 
+	// TLS 설정 적용
+	var tlsConfigMutex sync.RWMutex
+	if tlsConfig.Enabled {
+		tlsCfg, err := pkgtls.LoadTLSConfig(tlsConfig, logger)
+		if err != nil {
+			logger.Fatal("Failed to load TLS configuration", zap.Error(err))
+		}
+		srv.TLSConfig = tlsCfg
+
+		// 인증서 자동 리로드
+		go pkgtls.WatchCertificates(tlsConfig, func(newCfg *tls.Config) error {
+			tlsConfigMutex.Lock()
+			defer tlsConfigMutex.Unlock()
+			srv.TLSConfig = newCfg
+			return nil
+		}, logger)
+	}
+
+	// Server 시작 
 	go func() {
-		logger.Info("Starting server", zap.String("port", cfg.Port))
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		logger.Info("Starting server",
+			zap.String("port", cfg.Port),
+			zap.Bool("tls_enabled", tlsConfig.Enabled))
+
+		var err error
+		if tlsConfig.Enabled {
+			// TLS 활성화 시
+			err = srv.ListenAndServeTLS("", "") // 인증서는 TLSConfig에서 로드
+		} else {
+			// 일반 HTTP
+			err = srv.ListenAndServe()
+		}
+
+		if err != nil && err != http.ErrServerClosed {
 			logger.Fatal("Failed to start server", zap.Error(err))
 		}
 	}()
-
-    // TLS 설정 로드
-    tlsConfig := &pkgtls.TLSConfig{}
-    if err := envconfig.Process("", tlsConfig); err != nil {
-        logger.Fatal("Failed to load TLS config", zap.Error(err))
-    }
-
-    // Server 설정
-    srv := &http.Server{
-        Addr:    ":" + cfg.Port,
-        Handler: router,
-    }
-
-    // TLS 설정 적용
-    var tlsConfigMutex sync.RWMutex
-    if tlsConfig.Enabled {
-        tlsCfg, err := pkgtls.LoadTLSConfig(tlsConfig, logger)
-        if err != nil {
-            logger.Fatal("Failed to load TLS configuration", zap.Error(err))
-        }
-        srv.TLSConfig = tlsCfg
-
-        // 인증서 자동 리로드
-        go pkgtls.WatchCertificates(tlsConfig, func(newCfg *tls.Config) error {
-            tlsConfigMutex.Lock()
-            defer tlsConfigMutex.Unlock()
-            srv.TLSConfig = newCfg
-            return nil
-        }, logger)
-    }
-
-    go func() {
-        logger.Info("Starting server",
-            zap.String("port", cfg.Port),
-            zap.Bool("tls_enabled", tlsConfig.Enabled))
-        
-        var err error
-        if tlsConfig.Enabled {
-            err = srv.ListenAndServeTLS("", "") // 인증서는 TLSConfig에서 로드
-        } else {
-            err = srv.ListenAndServe()
-        }
-        
-        if err != nil && err != http.ErrServerClosed {
-            logger.Fatal("Failed to start server", zap.Error(err))
-        }
-    }()
 
 	// Graceful Shutdown
 	quit := make(chan os.Signal, 1)

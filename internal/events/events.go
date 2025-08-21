@@ -14,6 +14,9 @@ type OrderCreatedEvent struct {
     Status      string             `json:"status"`
     Timestamp   time.Time          `json:"timestamp"`
     RequestID   string             `json:"request_id"`
+    IdempotencyKey string             `json:"idempotency_key"`
+    UserAgent      string             `json:"user_agent"`
+    SourceIP       string             `json:"source_ip"`
 }
 
 type StockDeductionEvent struct {

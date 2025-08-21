@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -24,10 +25,10 @@ func NewOrderHandler(orderService *service.OrderService, logger *zap.Logger) *Or
 	}
 }
 
+// internal/handler/order_handler.go의 CreateOrder 메서드
 func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	var req domain.CreateOrderRequest
 
-	// Request binding
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Error("Invalid request", zap.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -40,8 +41,12 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	// Request ID from middleware
 	requestID := c.GetString("request_id")
 
+	// Context에 추가 정보 넣기
+	ctx := context.WithValue(c.Request.Context(), "user_agent", c.Request.UserAgent())
+	ctx = context.WithValue(ctx, "source_ip", c.ClientIP())
+
 	// Create order
-	order, err := h.orderService.CreateOrder(c.Request.Context(), req, requestID)
+	order, err := h.orderService.CreateOrder(ctx, req, requestID)
 	if err != nil {
 		h.logger.Error("Failed to create order",
 			zap.String("request_id", requestID),
