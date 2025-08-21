@@ -26,7 +26,12 @@ func NewOrderService(orderRepo *repository.OrderRepository, producer *events.Kaf
 }
 
 func (s *OrderService) CreateOrder(ctx context.Context, req domain.CreateOrderRequest, requestID string) (*domain.Order, error) {
-	// Order 생성 - Unix milliseconds를 사용하여 유니크한 OrderID 생성
+    s.logger.Info("Creating order",
+        zap.String("user_id", req.UserID),
+        zap.String("request_id", requestID),
+        zap.String("idempotency_key", req.IdempotencyKey),
+        zap.Int("items_count", len(req.Items)))
+
 	order := &domain.Order{
 		OrderID:        int(time.Now().UnixMilli()),
 		UserID:         req.UserID,
@@ -70,6 +75,8 @@ func (s *OrderService) CreateOrder(ctx context.Context, req domain.CreateOrderRe
 		Status:      string(order.Status),
 		Timestamp:   time.Now(),
 		RequestID:   requestID,
+        IdempotencyKey: req.IdempotencyKey,  // 추가
+        UserAgent:      c.Request.UserAgent(), // 추가 (handler에서 전달)
 	}
 
 	if err := s.producer.PublishOrderCreated(event); err != nil {
