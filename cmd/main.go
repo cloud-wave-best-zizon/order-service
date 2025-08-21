@@ -9,7 +9,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/joho/godotenv"
 	"github.com/cloud-wave-best-zizon/order-service/internal/events"
 	"github.com/cloud-wave-best-zizon/order-service/internal/handler"
 	"github.com/cloud-wave-best-zizon/order-service/internal/repository"
@@ -18,6 +17,7 @@ import (
 	"github.com/cloud-wave-best-zizon/order-service/pkg/middleware"
 	pkgtls "github.com/cloud-wave-best-zizon/order-service/pkg/tls"
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 	"go.uber.org/zap"
 )
 
@@ -36,7 +36,7 @@ func main() {
 		log.Fatal("Failed to load config:", err)
 	}
 
-	logger.Info("Service configuration", 
+	logger.Info("Service configuration",
 		zap.String("port", cfg.Port),
 		zap.String("kafka_brokers", cfg.KafkaBrokers),
 		zap.String("dynamodb_endpoint", cfg.DynamoDBEndpoint))
@@ -70,13 +70,25 @@ func main() {
 	{
 		v1.POST("/orders", orderHandler.CreateOrder)
 		v1.GET("/orders/:id", orderHandler.GetOrder)
+
+		// --- 여기부터 추가 ---
+		// 간단한 응답 테스트를 위한 PING API
+		v1.GET("/orders/test/ping", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{
+				"service":   "order-service",
+				"status":    "ok",
+				"timestamp": time.Now().Format(time.RFC3339),
+			})
+		})
+		// --- 여기까지 추가 ---
+
 		v1.GET("/health", func(c *gin.Context) {
 			status := gin.H{
-				"status": "healthy",
+				"status":  "healthy",
 				"service": "order-service",
-				"port": cfg.Port,
+				"port":    cfg.Port,
 			}
-			
+
 			// Kafka 상태 확인
 			if err := kafkaProducer.HealthCheck(); err != nil {
 				status["kafka"] = "unhealthy"
@@ -85,7 +97,7 @@ func main() {
 				return
 			}
 			status["kafka"] = "healthy"
-			
+
 			c.JSON(200, status)
 		})
 	}
