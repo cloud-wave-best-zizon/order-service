@@ -13,7 +13,7 @@ const (
 )
 
 type Order struct {
-	OrderID        int         `json:"order_id"` // int로 변경
+	OrderID        int         `json:"order_id"`
 	UserID         string      `json:"user_id"`
 	Items          []OrderItem `json:"items"`
 	TotalAmount    float64     `json:"total_amount"`
@@ -24,7 +24,7 @@ type Order struct {
 }
 
 type OrderItem struct {
-	ProductID   string  `json:"product_id"`
+	ProductID   int  `json:"product_id"`
 	ProductName string  `json:"product_name"`
 	Quantity    int     `json:"quantity"`
 	Price       float64 `json:"price"`
